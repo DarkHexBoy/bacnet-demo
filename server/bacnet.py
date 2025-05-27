@@ -6,6 +6,7 @@ from bacpypes.app import BIPSimpleApplication
 from bacpypes.local.device import LocalDeviceObject
 from bacpypes.object import AnalogValueObject
 from bacpypes.core import run, stop
+import psutil
 
 def load_config():
     config = configparser.ConfigParser()
@@ -84,6 +85,18 @@ def sensor_update_loop(analogs, stop_event):
             analogs[2].presentValue = 101.3
         time.sleep(5)
 
+def memory_monitor_loop(stop_event, interval=30):
+    process = psutil.Process(os.getpid())
+    elapsed = 0
+    while not stop_event.is_set():
+        if elapsed == 0:
+            mem_mb = process.memory_info().rss / 1024 / 1024
+            print(f"[内存监控] 当前进程占用内存: {mem_mb:.2f} MB")
+        time.sleep(0.5)
+        elapsed += 0.5
+        if elapsed >= interval:
+            elapsed = 0
+
 def input_listener():
     while True:
         cmd = input()
@@ -108,11 +121,14 @@ def main():
     update_thread.start()
     input_thread = threading.Thread(target=input_listener, daemon=True)
     input_thread.start()
+    mem_thread = threading.Thread(target=memory_monitor_loop, args=(stop_event,), daemon=True)
+    mem_thread.start()
     try:
         run()
     finally:
         stop_event.set()
         update_thread.join()
+        mem_thread.join()
 
 if __name__ == "__main__":
     main()
